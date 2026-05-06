@@ -76,6 +76,7 @@ class ModAction < ApplicationRecord
     upload_whitelist_delete: { domain: :string, path: :string, note: :string, hidden: :boolean },
     user_blacklist_changed: { user_id: :integer },
     user_text_change: { user_id: :integer },
+    user_custom_title_change: { user_id: :integer, old_custom_title: :string, new_custom_title: :string },
     user_upload_limit_change: { user_id: :integer, old_upload_limit: :integer, new_upload_limit: :integer },
     user_uploads_toggle: { user_id: :integer, disabled: :boolean },
     user_flags_change: { user_id: :integer, added: :string, removed: :string },
