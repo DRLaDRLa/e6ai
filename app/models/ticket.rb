@@ -74,7 +74,7 @@ class Ticket < ApplicationRecord
 
     module Dmail
       def can_create_for?(user)
-        content&.visible_to?(user) && content.to_id == user.id
+        content&.visible_to?(user) && (content.to_id == user.id || content.to_id == ::User.system.id)
       end
 
       def can_view?(user)

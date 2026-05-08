@@ -8,6 +8,7 @@ RSpec.describe DmailsController do
   let(:sender)    { create(:user) }
   let(:recipient) { create(:user) }
   let(:other)     { create(:user) }
+  let(:janitor) { create(:janitor_user) }
   let(:moderator) { create(:moderator_user) }
   let(:admin)     { create(:admin_user) }
 
@@ -181,6 +182,13 @@ RSpec.describe DmailsController do
       expect { get dmail_path(dmail) }.not_to(change { dmail.reload.is_read })
     end
 
+    it "returns 200 for a janitor viewing a system-received dmail" do
+      dmail_to_system = create(:dmail, from: recipient, to: User.system)
+      sign_in_as janitor
+      get dmail_path(dmail_to_system)
+      expect(response).to have_http_status(:ok)
+    end
+
     it "returns 200 for a moderator viewing a system-sent dmail" do
       system_dmail = create(:dmail, from: User.system, to: recipient)
       sign_in_as moderator
@@ -252,6 +260,21 @@ RSpec.describe DmailsController do
       expect(dmail.reload.is_read).to be true
     end
 
+    it "marks the system-received dmail as unread and reloads (HTML)" do
+      dmail_to_system = create(:dmail, from: recipient, to: User.system)
+      sign_in_as janitor
+      put mark_as_read_dmail_path(dmail_to_system)
+      expect(response).to redirect_to(admin_automod_dmail_path(dmail_to_system))
+      expect(flash[:notice]).to eq("Message marked as read")
+    end
+
+    it "marks the system-received dmail as unread (JSON)" do
+      dmail_to_system = create(:dmail, from: recipient, to: User.system)
+      sign_in_as janitor
+      put mark_as_read_dmail_path(dmail_to_system, format: :json)
+      expect(dmail_to_system.reload.is_read).to be true
+    end
+
     it "returns 403 for a non-owner member" do
       sign_in_as other
       put mark_as_read_dmail_path(dmail, format: :json)
@@ -271,7 +294,7 @@ RSpec.describe DmailsController do
       expect(response).to redirect_to(new_session_path)
     end
 
-    it "marks the dmail as unread and redirects with a notice for the owner (HTML)" do
+    it "marks the user-received dmail as unread and redirects with a notice for the owner (HTML)" do
       sign_in_as recipient
       put mark_as_unread_dmail_path(dmail)
       expect(dmail.reload.is_read).to be false
@@ -283,6 +306,21 @@ RSpec.describe DmailsController do
       sign_in_as recipient
       put mark_as_unread_dmail_path(dmail, format: :json)
       expect(dmail.reload.is_read).to be false
+    end
+
+    it "marks the system-received dmail as unread and reloads (HTML)" do
+      dmail_to_system = create(:dmail, from: recipient, to: User.system)
+      sign_in_as janitor
+      put mark_as_unread_dmail_path(dmail_to_system)
+      expect(response).to redirect_to(admin_automod_dmail_path(dmail_to_system))
+      expect(flash[:notice]).to eq("Message marked as unread")
+    end
+
+    it "marks the system-received dmail as unread (JSON)" do
+      dmail_to_system = create(:dmail, from: recipient, to: User.system)
+      sign_in_as janitor
+      put mark_as_unread_dmail_path(dmail_to_system, format: :json)
+      expect(dmail_to_system.is_read).to be false
     end
 
     it "returns 403 for a non-owner member" do

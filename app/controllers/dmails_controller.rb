@@ -57,15 +57,28 @@ class DmailsController < ApplicationController
     @dmail = Dmail.find(params[:id])
     check_privilege(@dmail)
     @dmail.mark_as_read!
+    if @dmail.to_id == User.system.id
+      respond_to do |format|
+        format.html { redirect_to(admin_automod_dmail_path(@dmail), notice: "Message marked as read") }
+        format.json
+      end
+    end
   end
 
   def mark_as_unread
     @dmail = Dmail.find(params[:id])
     check_privilege(@dmail)
     @dmail.mark_as_unread!
-    respond_to do |format|
-      format.html { redirect_to(dmails_path, notice: "Message marked as unread") }
-      format.json
+    if @dmail.to_id == User.system.id
+      respond_to do |format|
+        format.html { redirect_to(admin_automod_dmail_path(@dmail), notice: "Message marked as unread") }
+        format.json
+      end
+    else
+      respond_to do |format|
+        format.html { redirect_to(dmails_path, notice: "Message marked as unread") }
+        format.json
+      end
     end
   end
 
