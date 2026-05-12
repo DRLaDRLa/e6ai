@@ -29,7 +29,12 @@ Rails.application.routes.draw do
     resource :reowner, controller: "reowner", only: %i[new create]
     resource :stuck_dnp, controller: "stuck_dnp", only: %i[new create]
     resources :destroyed_posts, only: %i[index show update]
-    resources :automod_dmails, only: %i[index show]
+    resources :automod_dmails, only: %i[index show] do
+      member do
+        put :mark_as_read
+        put :mark_as_unread
+      end
+    end
   end
 
   namespace :security do
