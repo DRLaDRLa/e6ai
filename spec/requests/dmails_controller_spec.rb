@@ -93,6 +93,34 @@ RSpec.describe DmailsController do
         get new_dmail_path, params: { respond_to_id: dmail.id, forward: true }
         expect(response).to have_http_status(:ok)
       end
+
+      it "returns 200 for a janitor when the recipient is the system user" do
+        dmail_to_system = create(:dmail, from: sender, to: User.system, owner_id: User.system.id)
+        sign_in_as janitor
+        get new_dmail_path, params: { respond_to_id: dmail_to_system.id }
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "returns 403 for a different user when the recipient is the system user" do
+        dmail_to_system = create(:dmail, from: sender, to: User.system, owner_id: User.system.id)
+        sign_in_as other
+        get new_dmail_path, params: { respond_to_id: dmail_to_system.id }
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "returns 200 for a forward for a janitor when the recipient is the system user" do
+        dmail_to_system = create(:dmail, from: sender, to: User.system, owner_id: User.system.id)
+        sign_in_as janitor
+        get new_dmail_path, params: { respond_to_id: dmail_to_system.id, forward: true }
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "returns 403 for a forward for a different user when the recipient is the system user" do
+        dmail_to_system = create(:dmail, from: sender, to: User.system, owner_id: User.system.id)
+        sign_in_as other
+        get new_dmail_path, params: { respond_to_id: dmail_to_system.id, forward: true }
+        expect(response).to have_http_status(:forbidden)
+      end
     end
   end
 

@@ -40,7 +40,7 @@ module Admin
     private
 
     def find_system_dmail(id)
-      @dmail = Dmail.where("owner_id = ?", User.system.id).includes(:to, :from).find(id)
+      Dmail.where("owner_id = ?", User.system.id).includes(:to, :from).find(id)
     end
   end
 end
