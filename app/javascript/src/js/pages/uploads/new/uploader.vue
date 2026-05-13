@@ -472,7 +472,7 @@
           success(data) {
             self.submitting = false;
             self.allowNavigate = true;
-            E621.Flash.notice('Post uploaded successfully.');
+            E621.Toast.notice('Post uploaded successfully.');
             location.assign(data.location);
           },
           error(response, textStatus, errorThrown) {
