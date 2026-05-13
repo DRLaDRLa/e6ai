@@ -1,20 +1,19 @@
 # frozen_string_literal: true
 
-class Ticket < ApplicationRecord
+class Appeal < ApplicationRecord
   belongs_to_creator
-  user_status_counter :ticket_count
+  user_status_counter :appeal_count
   belongs_to :claimant, class_name: "User", optional: true
   belongs_to :handler, class_name: "User", optional: true
   belongs_to :accused, class_name: "User", optional: true
-  belongs_to :post_report_reason, foreign_key: "report_reason", optional: true
   after_initialize :classify
   before_validation :initialize_fields, on: :create
   normalizes :reason, with: ->(reason) { reason.gsub("\r\n", "\n") }
   validates :qtype, presence: true
+  validate :validate_type
   validates :reason, presence: true
   validates :reason, length: { minimum: 2, maximum: Danbooru.config.ticket_max_size }
   validates :response, length: { minimum: 2, maximum: Danbooru.config.dmail_max_size }, on: :update
-  validate :validate_type
   enum :status, %i[pending partial approved].index_with(&:to_s)
   after_create :push_pubsub_create
   after_update :push_pubsub_update_notification
@@ -25,213 +24,46 @@ class Ticket < ApplicationRecord
 
   scope :for_creator, ->(uid) { where("creator_id = ?", uid) }
 
-  attr_accessor :record_type, :send_update_dmail
+  attr_accessor :send_update_dmail
 
   # Permissions Table
-  # Creator can always view their own ticket. Admin always has unconditional view access.
+  # Creator can always view their own appeals. Admin always has unconditional view access.
   # For content-gated types, staff can view even if the content no longer exists.
   #
   # |    Type    |      Can Create     |  Min. View Level  | View Content Check |
   # |:----------:|:-------------------:|:-----------------:|:------------------:|
-  # |    Blip    |      Accessible     |     Janitor+      |     Accessible     |
-  # |   Comment  |      Accessible     |     Janitor+      |     Accessible     |
-  # |    Dmail   | Visible & Recipient |    Moderator+     |      Visible       |
-  # | Forum Post |       Visible       |     Janitor+      |      Visible       |
-  # |    Pool    |         Any         |     Janitor+      |        -           |
-  # |    Post    |         Any         |     Janitor+      |        -           |
-  # |  Post Set  |       Visible       |     Janitor+      |      Visible       |
-  # |    User    |         Any         |    Moderator+     |        -           |
-  # |  Wiki Page |         Any         |     Janitor+      |        -           |
+  # |  PostFlag  |      Accessible     |     Janitor+      |     Accessible     |
   # |    Other   |         None        |    Moderator+     |        -           |
-  # |Replacement |       Visible       |     Janitor+      |      Visible       |
 
-  module TicketTypes
-    module Blip
-      def can_create_for?(user)
-        content&.can_access?(user)
-      end
-
-      def can_view?(user)
-        return true if user.is_staff? && (content.blank? || content&.can_access?(user))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-    end
-
-    module Comment
-      def can_create_for?(user)
-        content&.is_accessible?(user, bypass_user_settings: true)
-      end
-
-      def can_view?(user)
-        return true if user.is_staff? && (content.blank? || content&.is_accessible?(user, bypass_user_settings: true))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-    end
-
-    module Dmail
-      def can_create_for?(user)
-        content&.visible_to?(user) && (content.to_id == user.id || content.to_id == ::User.system.id)
-      end
-
-      def can_view?(user)
-        return true if user.is_moderator? && (content.blank? || content&.visible_to?(user))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-
-      def bot_target_name
-        content&.from&.name
-      end
-    end
-
-    module Forum
-      # FIXME: Remove this by renaming the qtype value to the correct one
+  module AppealTypes
+    module Flag
       def model
-        ::ForumPost
+        ::PostFlag
       end
 
       def can_create_for?(user)
-        content&.can_access?(user)
-      end
-
-      def can_view?(user)
-        return true if user.is_staff? && (content.blank? || content&.can_access?(user))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-    end
-
-    module Pool
-      def can_create_for?(_user)
+        return false if content.blank?
+        return false if content.post.blank?
+        return false unless content.post.uploader_id == user.id
         true
       end
 
-      def can_view?(user)
+      def can_view?(user = CurrentUser.user)
         return true if user.is_staff?
         return true if user.id == creator_id
         false
-      end
-
-      def bot_target_name
-        content&.name
-      end
-    end
-
-    module Post
-      def self.extended(modul)
-        modul.class_eval do
-          validates :report_reason, presence: true
-        end
-      end
-
-      def subject
-        reason.strip.split("\n").filter(&:present?)[0] || "Unknown Report Type"
-      end
-
-      def can_create_for?(_user)
-        true
-      end
-
-      def can_view?(user)
-        return true if user.is_staff?
-        return true if user.id == creator_id
-        false
-      end
-
-      def bot_target_name
-        content&.uploader&.name
-      end
-    end
-
-    module Set
-      def model
-        ::PostSet
-      end
-
-      def can_create_for?(user)
-        content&.can_view?(user)
-      end
-
-      def can_view?(user)
-        return true if user.is_staff? && (content.blank? || content&.can_view?(user))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-    end
-
-    module User
-      def can_create_for?(_user)
-        true
-      end
-
-      def can_view?(user)
-        return true if user.is_moderator?
-        return true if user.id == creator_id
-        false
-      end
-
-      def bot_target_name
-        content&.name
-      end
-    end
-
-    module Wiki
-      def model
-        ::WikiPage
-      end
-
-      def can_create_for?(_user)
-        true
-      end
-
-      def bot_target_name
-        content&.title
-      end
-
-      def can_view?(user)
-        return true if user.is_staff?
-        return true if user.id == creator_id
-        false
-      end
-    end
-
-    module Replacement
-      def model
-        ::PostReplacement
-      end
-
-      def can_create_for?(user)
-        content&.visible_to?(user)
-      end
-
-      def can_view?(user)
-        return true if user.is_staff? && (content.blank? || content&.visible_to?(user))
-        return true if user.is_admin?
-        return true if user.id == creator_id
-        false
-      end
-
-      def subject
-        reason.strip.split("\n").filter(&:present?)[0] || "Unknown Report Type"
       end
     end
   end
 
-  VALID_QTYPES = TicketTypes.constants.map { |c| c.to_s.downcase }.freeze
+  VALID_QTYPES = AppealTypes.constants.map { |c| c.to_s.downcase }.freeze
 
   module APIMethods
     def hidden_attributes
       hidden = []
 
       unless can_view?(CurrentUser.user)
-        hidden += %i[creator_id accused_id reason response report_reason]
+        hidden += %i[creator_id accused_id reason response]
         return super + hidden
       end
 
@@ -249,21 +81,21 @@ class Ticket < ApplicationRecord
       return if creator == User.system
 
       # Hourly limit
-      hourly_allowed = creator.can_ticket_hourly_with_reason
+      hourly_allowed = creator.can_appeal_hourly_with_reason
       if hourly_allowed != true
         errors.add(:creator, User.throttle_reason(hourly_allowed, "hourly"))
         return false
       end
 
       # Daily limit
-      daily_allowed = creator.can_ticket_daily_with_reason
+      daily_allowed = creator.can_appeal_daily_with_reason
       if daily_allowed != true
         errors.add(:creator, User.throttle_reason(daily_allowed, "daily"))
         return false
       end
 
       # Active limit
-      active_allowed = creator.can_ticket_active_with_reason
+      active_allowed = creator.can_appeal_active_with_reason
       if active_allowed != true
         errors.add(:creator, User.throttle_reason(active_allowed, "active"))
         return false
@@ -281,16 +113,13 @@ class Ticket < ApplicationRecord
     def initialize_fields
       self.status = "pending"
       case qtype
-      when "blip"
-        self.accused_id = Blip.find(disp_id).creator_id
-      when "forum"
-        self.accused_id = ForumPost.find(disp_id).creator_id
-      when "comment"
-        self.accused_id = Comment.find(disp_id).creator_id
-      when "dmail"
-        self.accused_id = Dmail.find(disp_id).from_id
-      when "user"
-        self.accused_id = disp_id
+      when "flag"
+        flag = content
+        if flag.present?
+          self.accused_id = flag.creator_id
+        else
+          errors.add model.name.underscore.to_sym, "does not exist"
+        end
       end
     end
   end
@@ -305,10 +134,8 @@ class Ticket < ApplicationRecord
     end
 
     def visible(user)
-      if user.is_moderator?
+      if user.is_janitor?
         all
-      elsif user.is_janitor?
-        for_creator(user.id).or(where.not(qtype: %w[dmail user]))
       else
         for_creator(user.id)
       end
@@ -352,7 +179,7 @@ class Ticket < ApplicationRecord
 
   module ClassifyMethods
     def classify
-      extend(TicketTypes.const_get(qtype.camelize)) if TicketTypes.constants.map(&:to_s).include?(qtype&.camelize)
+      extend(AppealTypes.const_get(qtype.camelize)) if AppealTypes.constants.map(&:to_s).include?(qtype&.camelize)
     end
   end
 
@@ -371,17 +198,17 @@ class Ticket < ApplicationRecord
 
   def can_view?(user = CurrentUser.user)
     # Should not happen - individual ticket types override this method.
-    return true if user.is_moderator?
+    return true if user.is_janitor?
     return true if user.id == creator_id
     false
   end
 
   def can_handle?(user = CurrentUser.user)
-    user.is_moderator?
+    user.is_janitor?
   end
 
   def can_claim?(user = CurrentUser.user)
-    user.is_moderator?
+    user.is_janitor?
   end
 
   def can_create_for?(_user)
@@ -396,6 +223,17 @@ class Ticket < ApplicationRecord
     model.name.titlecase
   end
 
+  def pretty_status
+    case status
+    when "partial"
+      "Under Investigation"
+    when "approved"
+      "Investigated"
+    else
+      status.titleize
+    end
+  end
+
   def subject
     trimmed = reason.strip
     if trimmed.length > 40
@@ -406,21 +244,24 @@ class Ticket < ApplicationRecord
   end
 
   def open_duplicates
-    Ticket.where(
+    Appeal.where(
       qtype: qtype,
       disp_id: disp_id,
       status: "pending",
     ).where.not(id: id)
   end
 
-  def warnable?
-    content.respond_to?(:user_warned!) && !content.was_warned? && pending?
+  def open_from_same_user
+    @open_from_same_user ||= Appeal.where(
+      creator_id: creator_id,
+      status: %w[pending partial],
+    ).where.not(id: id)
   end
 
   module ClaimMethods
     def claim!(user = CurrentUser)
       transaction do
-        ModAction.log(:ticket_claim, { ticket_id: id })
+        ModAction.log(:appeal_claim, { appeal_id: id })
         update_attribute(:claimant_id, user.id)
         push_pubsub("claim")
       end
@@ -428,7 +269,7 @@ class Ticket < ApplicationRecord
 
     def unclaim!(_user = CurrentUser)
       transaction do
-        ModAction.log(:ticket_unclaim, { ticket_id: id })
+        ModAction.log(:appeal_unclaim, { appeal_id: id })
         update_attribute(:claimant_id, nil)
         push_pubsub("unclaim")
       end
@@ -442,15 +283,15 @@ class Ticket < ApplicationRecord
       return unless should_send
 
       msg = <<~MSG.chomp
-        "Your ticket":#{Rails.application.routes.url_helpers.ticket_path(self)} has been updated by #{handler.pretty_name}.
-        Ticket Status: #{status}
+        "Your appeal":#{Rails.application.routes.url_helpers.appeal_path(self)} has been updated by #{handler.pretty_name}.
+        Appeal Status: #{pretty_status}
 
         Response: #{response}
       MSG
       Dmail.create_split(
         from_id: CurrentUser.id,
         to_id: creator.id,
-        title: "Your ticket has been updated#{" to #{status}" if saved_change_to_status?}",
+        title: "Your appeal has been updated#{" to #{pretty_status}" if saved_change_to_status?}",
         body: msg,
         bypass_limits: true,
       )
@@ -459,7 +300,7 @@ class Ticket < ApplicationRecord
     def log_update
       return unless saved_change_to_response? || saved_change_to_status?
 
-      ModAction.log(:ticket_update, { ticket_id: id, status: status, response: response, status_was: status_before_last_save, response_was: response_before_last_save })
+      ModAction.log(:appeal_update, { appeal_id: id, status: status, response: response, status_was: status_before_last_save, response_was: response_before_last_save })
     end
   end
 
@@ -467,7 +308,7 @@ class Ticket < ApplicationRecord
     def pubsub_hash(action)
       {
         action: action,
-        ticket: {
+        appeal: {
           id: id,
           user_id: creator_id,
           user: creator_id ? User.id_to_name(creator_id) : nil,
@@ -483,7 +324,7 @@ class Ticket < ApplicationRecord
     end
 
     def push_pubsub(action)
-      Cache.redis.publish("ticket_updates", pubsub_hash(action).to_json)
+      Cache.redis.publish("appeal_updates", pubsub_hash(action).to_json)
     end
 
     def push_pubsub_create

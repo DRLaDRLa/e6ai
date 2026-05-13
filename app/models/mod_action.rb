@@ -71,6 +71,9 @@ class ModAction < ApplicationRecord
     ticket_claim: { ticket_id: :integer },
     ticket_unclaim: { ticket_id: :integer },
     ticket_update: { ticket_id: :integer, status: :string, response: :string, status_was: :string, response_was: :string },
+    appeal_claim: { appeal_id: :integer },
+    appeal_unclaim: { appeal_id: :integer },
+    appeal_update: { appeal_id: :integer, status: :string, response: :string, status_was: :string, response_was: :string },
     upload_whitelist_create: { domain: :string, path: :string, note: :string, hidden: :boolean },
     upload_whitelist_update: { domain: :string, path: :string, note: :string, old_domain: :string, old_path: :string, hidden: :boolean },
     upload_whitelist_delete: { domain: :string, path: :string, note: :string, hidden: :boolean },
@@ -228,6 +231,10 @@ class ModAction < ApplicationRecord
 
       if !CurrentUser.is_moderator? && %i[ticket_update].include?(action.to_sym)
         sanitized_values = sanitized_values.slice("ticket_id")
+      end
+
+      if !CurrentUser.is_janitor? && %i[appeal_update].include?(action.to_sym)
+        sanitized_values = sanitized_values.slice("appeal_id")
       end
 
       sanitized_values
