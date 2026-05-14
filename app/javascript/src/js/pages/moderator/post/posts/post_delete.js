@@ -31,21 +31,33 @@ PostDeletion.init = function () {
         dMailTextArea.attr("disabled", "disabled");
       }
     };
-    updateDMailReason = function () {
+    updateDMailReason = function (force = false) {
       const newReason = input.val()?.toString();
       let newTitle = dMailTemplate.selectedOptions[0].getAttribute("data-dmail-title");
       let newMessage = dMailTemplate.value;
+      // Don't overwrite the input's text unless necessary
+      let titleChanged = force, messageChanged = force;
       if (!Utility.blank(newReason)) {
-        newTitle = newTitle.replaceAll("%REASON%", newReason);
-        newMessage = newMessage.replaceAll("%REASON%", newReason);
+        if (newTitle.indexOf("%REASON%") >= 0) {
+          newTitle = newTitle.replaceAll("%REASON%", newReason);
+          titleChanged = true;
+        }
+        if (newMessage.indexOf("%REASON%") >= 0) {
+          newMessage = newMessage.replaceAll("%REASON%", newReason);
+          messageChanged = true;
+        }
       }
-      dMailTitleInput.val(newTitle);
-      dMailTextArea.val(newMessage);
+      if (titleChanged) {
+        dMailTitleInput.val(newTitle);
+      }
+      if (messageChanged) {
+        dMailTextArea.val(newMessage);
+      }
     };
     dMailCheckBox.addEventListener("click", () => updateDMailActivation());
     dMailTemplate.addEventListener("change", () => updateDMailReason());
     updateDMailActivation();
-    updateDMailReason();
+    updateDMailReason(true);
   }
   // #endregion DMail Notification
 
