@@ -38,12 +38,13 @@ PostDeletion.init = function () {
       // Don't overwrite the input's text unless necessary
       let titleChanged = force, messageChanged = force;
       if (!Utility.blank(newReason)) {
-        if (newTitle.indexOf("%REASON%") >= 0) {
-          newTitle = newTitle.replaceAll("%REASON%", newReason);
+        const reasonPlaceholder = "%REASON%";
+        if (newTitle.indexOf(reasonPlaceholder) >= 0) {
+          newTitle = newTitle.replaceAll(reasonPlaceholder, newReason);
           titleChanged = true;
         }
-        if (newMessage.indexOf("%REASON%") >= 0) {
-          newMessage = newMessage.replaceAll("%REASON%", newReason);
+        if (newMessage.indexOf(reasonPlaceholder) >= 0) {
+          newMessage = newMessage.replaceAll(reasonPlaceholder, newReason);
           messageChanged = true;
         }
       }
