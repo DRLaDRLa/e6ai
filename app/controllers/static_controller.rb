@@ -41,6 +41,27 @@ class StaticController < ApplicationController
   end
 
   def home
+    @mascot_id = cookies[:mascot].to_i
+    mascot_list = Mascot.active_for_browser
+    selected_mascot = @mascot_id > 0 ? mascot_list[@mascot_id] : nil
+    selected_mascot ||= mascot_list[mascot_list.keys.sample]
+
+    if selected_mascot.present?
+      @mascot_id = selected_mascot["id"]
+      @mascot_background_url = selected_mascot["background_url"]
+      @mascot_artist_name = selected_mascot["artist_name"]
+      @mascot_artist_url = selected_mascot["artist_url"]
+
+      @extra_body_args = {
+        style: [
+          "--bg-image: url('#{@mascot_background_url}')",
+          "--bg-color: #{selected_mascot['background_color']}",
+          "--fg-color: #{selected_mascot['foreground_color']}",
+        ].join(";"),
+        layered: ("true" if selected_mascot["is_layered"]),
+      }
+    end
+
     render layout: "blank", formats: [:html]
   end
 
