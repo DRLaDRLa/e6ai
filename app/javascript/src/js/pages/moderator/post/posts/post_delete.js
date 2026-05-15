@@ -55,7 +55,7 @@ PostDeletion.init = function () {
       }
     };
     dMailCheckBox.addEventListener("click", () => updateDMailActivation());
-    dMailTemplate.addEventListener("change", () => updateDMailReason());
+    dMailTemplate.addEventListener("change", () => updateDMailReason(true));
     updateDMailActivation();
     updateDMailReason(true);
   }
